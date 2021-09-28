@@ -100,6 +100,7 @@ class GravnetModel(nn.Module):
         output_dim: int=4,
         n_gravnet_blocks: int=4,
         n_postgn_dense_blocks: int=4,
+        k: int= 40
         ):
         super(GravnetModel, self).__init__()
         self.input_dim = input_dim
@@ -113,7 +114,7 @@ class GravnetModel(nn.Module):
         # Note: out_channels of the internal gravnet layer
         # not clearly specified in paper
         self.gravnet_blocks = nn.ModuleList([
-            GravNetBlock(64 if i==0 else 96) for i in range(self.n_gravnet_blocks)
+            GravNetBlock(64 if i==0 else 96, k=k) for i in range(self.n_gravnet_blocks)
             ])
 
         # Post-GravNet dense layers
