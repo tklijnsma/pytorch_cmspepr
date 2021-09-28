@@ -298,6 +298,11 @@ def formatted_loss_components_string(components: dict) -> str:
             '\n      L_beta_logbeta_term = {L_beta_logbeta_term}'
             .format(**{k : fkey(k) for k in components})
             )
+    if 'L_p' in components:
+        s += f'\n  L_p                 = {fkey("L_p")}'
+        for key in sorted(k for k in components.keys() if k.startswith('L_p_')):
+            s += f'\n    {key:<20}= {fkey(key)}'
+        s += f'\nTOTAL: L_V + L_beta + L_p = {total_loss+components["L_p"]}'
     return s
 
 def huber(d, delta):
