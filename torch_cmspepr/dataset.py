@@ -171,6 +171,7 @@ class TauDataset(Dataset):
 
     def __len__(self):
         return len(self.npzs)
+
     def len(self):
         return len(self.npzs)
 
@@ -184,6 +185,56 @@ class TauDataset(Dataset):
         left.npzs = self.npzs[:split_index]
         right.npzs = self.npzs[split_index:]
         return left, right
+
+
+class TauPUDataset(Dataset):
+    def __init__(self, path:str, flip: bool=True, noise_reduction: float=None):
+        super(TauPUDataset, self).__init__(path)
+        self.npzs = list(sorted(glob.iglob(path + '/*.npz')))
+        self.noise_reduction = noise_reduction
+
+    def __len__(self):
+        return len(self.npzs)
+
+    def len(self):
+        return len(self.npzs)
+
+    def get(self, i):
+        import hgcal_npz
+        event = hgcal_npz.Event.load(self.npzs[i])
+        x = event.rechits.to_numpy([
+            'RecHitHGC_x',
+            'RecHitHGC_y',
+            'RecHitHGC_z',
+            'RecHitHGC_energy',
+            'RecHitHGC_time',
+            'RecHitHGC_theta',
+            'RecHitHGC_eta',
+            'RecHitHGC_phi',
+            'RecHitHGC_R'
+            ])
+        y = event.rechits.get('RecHitHGC_incrClusterIdx')
+
+        if self.noise_reduction is not None:
+            # Get indices of where noise is
+            noise_indices, _ = np.nonzero(y==0)
+            # Randomly (but with fixed seed) select some noise indices to throw away
+            idxs_to_throw_away = np.default_rng(i).choice(
+                noise_indices,
+                int(self.noise_reduction*len(noise_indices)),
+                replace=False
+                )
+            # Invert to a mask of indices to _keep_
+            keep = np.ones(len(y), dtype=bool)
+            keep[idxs_to_throw_away] = False
+            # Select
+            x = x[keep]
+            y = y[keep]
+            
+        return Data(
+            x = torch.from_numpy(x).type(torch.float),
+            y = torch.from_numpy(y).type(torch.int)
+            )
 
 
 def incremental_cluster_index(input: torch.Tensor, noise_index=None):
@@ -226,6 +277,7 @@ def incremental_cluster_index_np(input: np.array, noise_index=None):
             # Still reserve 0 for noise, even if it's not present
             cluster_index_map += 1
     return np.take(cluster_index_map, locations)
+
 
 def mask_fraction_of_noise(y: np.array, reduce_fraction: float, noise_index: int=-1) -> np.array:
     """Create a mask that throws out a fraction of noise (but keeps all signal)."""

@@ -34,14 +34,14 @@ def get_extensions():
         extra_link_args = ['-s']
 
         info = parallel_info()
-        if 'backend: OpenMP' in info and 'OpenMP not found' not in info:
-            extra_compile_args['cxx'] += ['-DAT_PARALLEL_OPENMP']
-            if sys.platform == 'win32':
-                extra_compile_args['cxx'] += ['/openmp']
-            else:
-                extra_compile_args['cxx'] += ['-fopenmp']
-        else:
-            print('Compiling without OpenMP...')
+        # if 'backend: OpenMP' in info and 'OpenMP not found' not in info:
+        #     extra_compile_args['cxx'] += ['-DAT_PARALLEL_OPENMP']
+        #     if sys.platform == 'win32':
+        #         extra_compile_args['cxx'] += ['/openmp']
+        #     else:
+        #         extra_compile_args['cxx'] += ['-fopenmp']
+        # else:
+        #     print('Compiling without OpenMP...')
 
         if suffix == 'cuda':
             define_macros += [('WITH_CUDA', None)]
