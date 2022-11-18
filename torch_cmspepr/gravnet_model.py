@@ -189,6 +189,7 @@ class NoiseFilterModel(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return self.network(x)
 
+
 class GravnetModelWithNoiseFilter(nn.Module):
 
     def __init__(self, *args, **kwargs):

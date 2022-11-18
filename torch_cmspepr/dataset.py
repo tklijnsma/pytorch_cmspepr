@@ -188,7 +188,7 @@ class TauDataset(Dataset):
 
 
 class TauPUDataset(Dataset):
-    def __init__(self, path:str, flip: bool=True, noise_reduction: float=None):
+    def __init__(self, path:str, noise_reduction: float=None):
         super(TauPUDataset, self).__init__(path)
         self.npzs = list(sorted(glob.iglob(path + '/*.npz')))
         self.noise_reduction = noise_reduction
@@ -215,6 +215,9 @@ class TauPUDataset(Dataset):
             ])
         y = event.rechits.get('RecHitHGC_incrClusterIdx')
 
+        if np.any(np.isnan(x)) or np.any(np.isnan(y)):
+            raise Exception(f'Encountered NaN in {self.npzs[i]}')
+        
         if self.noise_reduction is not None:
             # Get indices of where noise is
             noise_indices, _ = np.nonzero(y==0)
@@ -233,10 +236,22 @@ class TauPUDataset(Dataset):
             
         return Data(
             x = torch.from_numpy(x).type(torch.float),
-            y = torch.from_numpy(y).type(torch.int)
+            y = torch.from_numpy(y).type(torch.int),
+            inpz = torch.Tensor([i])
             )
 
+    def split(self, fraction):
+        """
+        Creates two new instances with a fraction of events split
+        """
+        left = self.__class__(self.root, self.noise_reduction)
+        right = self.__class__(self.root, self.noise_reduction)
+        split_index = int(fraction*len(self))
+        left.npzs = self.npzs[:split_index]
+        right.npzs = self.npzs[split_index:]
+        return left, right
 
+    
 def incremental_cluster_index(input: torch.Tensor, noise_index=None):
     """
     Build a map that translates arbitrary indices to ordered starting from zero
