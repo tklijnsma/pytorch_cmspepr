@@ -1,5 +1,5 @@
-from typing import Union
 import torch
+
 
 def batch_to_row_splits(batch: torch.LongTensor):
     device = batch.device

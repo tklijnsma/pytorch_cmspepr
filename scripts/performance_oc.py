@@ -7,6 +7,7 @@ import time
 
 gpu = torch.device('cuda')
 
+
 def make_random_event(n_nodes=10000, n_events=5):
     model_out = torch.rand((n_nodes, 32))
 

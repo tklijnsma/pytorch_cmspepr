@@ -174,11 +174,10 @@ class multiple_gpu:
 
 def test_analyze_cond_points():
     from torch_cmspepr.objectcondensation import analyze_cond_points
+
     cond_indices, cond_counts, cond_row_splits, which_cond_point = analyze_cond_points(
-        multiple.q,
-        multiple.y.type(torch.int),
-        multiple.row_splits
-        )
+        multiple.q, multiple.y.type(torch.int), multiple.row_splits
+    )
     print(f'{cond_indices=}')
     print(f'{cond_counts=}')
     print(f'{cond_row_splits=}')
@@ -272,7 +271,7 @@ def test_oc_gpu_batch():
         multiple.x,
         multiple.y.type(torch.int),
         multiple.row_splits,
-        )
+    )
     print('Running CUDA extension')
     losses_cuda = torch.ops.oc_cuda.oc_cuda(
         multiple_gpu.beta,
@@ -283,8 +282,8 @@ def test_oc_gpu_batch():
         multiple_gpu.row_splits,
         multiple_gpu.cond_row_splits,
         multiple_gpu.cond_indices,
-        multiple_gpu.cond_counts
-        ).cpu()
+        multiple_gpu.cond_counts,
+    ).cpu()
     print(f'{losses_cuda=}')
     print(f'{losses_cpp=}')
     # Don't compare L_beta_cond_logterm and L_noise losses here
@@ -293,22 +292,19 @@ def test_oc_gpu_batch():
 
 def test_oc_python_gpu_batch():
     import torch_cmspepr
+
     print('Running CPU extension')
     losses_cpp = torch_cmspepr.oc(
-        multiple.beta,
-        multiple.q,
-        multiple.x,
-        multiple.y,
-        multiple.batch
-        )
+        multiple.beta, multiple.q, multiple.x, multiple.y, multiple.batch
+    )
     print('Running CUDA extension')
     losses_cuda = torch_cmspepr.oc(
         multiple_gpu.beta,
         multiple_gpu.q,
         multiple_gpu.x,
         multiple_gpu.y,
-        multiple_gpu.batch
-        ).cpu()
+        multiple_gpu.batch,
+    ).cpu()
     print(f'{losses_cuda=}')
     print(f'{losses_cpp=}')
     assert torch.allclose(losses_cuda, losses_cpp)

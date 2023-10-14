@@ -7,6 +7,8 @@ Now also has extensions for the [Object Condensation](https://arxiv.org/abs/2002
 
 ## Example
 
+kNN:
+
 ```python
 >>> import torch
 >>> import torch_cmspepr
@@ -45,6 +47,8 @@ tensor([[0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8],
 tensor([[0, 1, 1, 2, 2, 3, 5, 6, 6, 7, 7, 8],
         [1, 0, 2, 1, 3, 2, 6, 5, 7, 6, 8, 7]], device='cuda:0')
 ```
+
+Object condensation:
 
 ```py
 >>> import torch
