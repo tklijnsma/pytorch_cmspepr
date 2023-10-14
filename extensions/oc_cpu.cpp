@@ -18,19 +18,10 @@ float calc_dist_sq(
     ){
     float_t distsq = 0;
     if (i == j) return 0;
-    // std::cout << "dist_sq i=" << i << " j=" << j << std::endl;
     for (size_t idim = 0; idim < ndim; idim++) {
         float_t dist = x[I2D(i,idim,ndim)] - x[I2D(j,idim,ndim)];
-        // std::cout
-        //     << "  idim=" << idim
-        //     << " x[" << i << "][" << idim << "]=" << x[I2D(i,idim,ndim)]
-        //     << " x[" << j << "][" << idim << "]=" << x[I2D(j,idim,ndim)]
-        //     << " d=" << dist
-        //     << " d_sq=" << dist*dist
-        //     << std::endl;
         distsq += dist * dist;
     }
-    // std::cout << "  d_sq_sum=" << distsq << std::endl;
     return distsq;
     }
 
@@ -59,15 +50,6 @@ void oc_kernel(
 
     int32_t i_cond = which_cond_point[i_node];
 
-    // std::cout
-    //     << "i_node=" << i_node
-    //     << " i_cond=" << i_cond
-    //     << " q[i_node]=" << q[i_node]
-    //     << " cond_start=" << cond_indices_start
-    //     << " cond_end=" << cond_indices_end
-    //     << " n_nodes=" << n_nodes
-    //     << std::endl;
-
     // V_att and V_srp
     if (i_cond == -1 || i_node == (size_t)i_cond){
         // Noise node, or a condensation point itself
@@ -83,12 +65,6 @@ void oc_kernel(
         // V_srp must still be normalized! This is done in the V_rep loop because the
         // normalization numbers are easier to access there.
         *V_srp = 1. / (20.*d_sq + 1.);
-        // std::cout << "  d_huber for i_node " << i_node << ": "
-        //     << d_huber
-        //     << "; d_sq=" << d_sq
-        //     << "; V_att=" << *V_att
-        //     << "; V_srp=" << *V_srp
-        //     << std::endl;
         }
 
     // V_rep
@@ -123,12 +99,6 @@ oc_cpu(
     const size_t n_nodes = q_tensor.size(0);
     const auto n_dim_cluster_space = x_tensor.size(1);
     const size_t n_events = row_splits_tensor.size(0) - 1;
-
-    // std::cout
-    //     << "n_nodes=" << n_nodes
-    //     << " n_dim_cluster_space=" << n_dim_cluster_space
-    //     << " n_events=" << n_events
-    //     << std::endl;
 
     auto beta = beta_tensor.data_ptr<float_t>();
     auto q = q_tensor.data_ptr<float_t>();
@@ -181,13 +151,6 @@ oc_cpu(
             if (y_node == 0) continue; // Bkg nodes don't belong to a cond point
             count[y_node-1]++;
             if (q[i_node] > q_max[y_node-1]){
-                // std::cout
-                //     << "i_node=" << i_node
-                //     << " y_node-1=" << y_node-1
-                //     << " q[i_node]=" << q[i_node]
-                //     << " > q_max[y_node-1]=" << q_max[y_node-1]
-                //     << "\n Updating i_max[y_node-1] to " << i_node
-                //     << std::endl;
                 q_max[y_node-1] = q[i_node];
                 i_max[y_node-1] = i_node;
                 }
@@ -215,29 +178,6 @@ oc_cpu(
         free(i_max);
         free(count);
     }
-
-    // Debug printout
-
-    // std::cout << "n_cond_per_event =";
-    // for (size_t i=0; i<n_events; i++) std::cout << " " << n_cond_per_event[i];
-    // std::cout << std::endl;
-
-    // std::cout << "cond_indices_row_splits =";
-    // for (size_t i=0; i<n_events+1; i++) std::cout << " " << cond_indices_row_splits[i];
-    // std::cout << std::endl;
-
-    // std::cout << "cond_indices =";
-    // for (size_t i=0; i<n_cond; i++) std::cout << " " << cond_indices[i];
-    // std::cout << std::endl;
-
-    // std::cout << "cond_counts =";
-    // for (size_t i=0; i<n_cond; i++) std::cout << " " << cond_counts[i];
-    // std::cout << std::endl;
-
-    // std::cout << "which_cond_point =";
-    // for (size_t i=0; i<n_nodes; i++) std::cout << " " << which_cond_point[i];
-    // std::cout << std::endl;
-
 
     // Prepare output tensor
     auto options = torch::TensorOptions().dtype(torch::kFloat32);

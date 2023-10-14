@@ -5,6 +5,7 @@ import torch_cmspepr
 import tqdm
 import time
 
+gpu = torch.device('cuda')
 
 def make_random_event(n_nodes=10000, n_events=5):
     model_out = torch.rand((n_nodes, 32))
@@ -50,7 +51,8 @@ def test_oc_performance():
 
     t_py = 0.0
     t_cpp = 0.0
-    N = 1000
+    t_cuda = 0.0
+    N = 50
     for i_test in tqdm.tqdm(range(N)):
         # Don't count prep work in performance
         model_out, y, batch, row_splits = make_random_event()
@@ -61,18 +63,29 @@ def test_oc_performance():
         ).contiguous()
         x = model_out[:, 1:].contiguous()
 
+        beta_gpu = beta.to(gpu)
+        q_gpu = q.to(gpu)
+        x_gpu = x.to(gpu)
+        y_gpu = y.to(gpu)
+        batch_gpu = batch.to(gpu)
+
         t0 = time.perf_counter()
         objectcondensation.oc_loss(model_out, data)
         t1 = time.perf_counter()
         torch_cmspepr.oc(beta, q, x, y, batch)
         t2 = time.perf_counter()
+        torch_cmspepr.oc(beta_gpu, q_gpu, x_gpu, y_gpu, batch_gpu)
+        t3 = time.perf_counter()
 
         t_py += t1 - t0
         t_cpp += t2 - t1
+        t_cuda += t3 - t2
 
     print(f'Average python time: {t_py/N:.4f}')
     print(f'Average cpp    time: {t_cpp/N:.4f}')
-    print(f'Speed up is {t_py/t_cpp:.2f}x')
+    print(f'Average cuda   time: {t_cuda/N:.4f}')
+    print(f'Speed up is {t_py/t_cpp:.2f}x (cpp vs. py)')
+    print(f'Speed up is {t_cpp/t_cuda:.2f}x (cuda vs. cpp)')
 
 
 test_oc_performance()

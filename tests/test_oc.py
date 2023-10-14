@@ -4,11 +4,42 @@ from math import log
 import torch
 from torch_geometric.data import Data
 
+
+gpu = torch.device('cuda')
+
 SO_DIR = osp.dirname(osp.dirname(osp.abspath(__file__)))
 
 
 def calc_q_betaclip(beta, qmin=1.0):
     return (beta.clip(0.0, 1 - 1e-4) / 1.002).arctanh() ** 2 + qmin
+
+
+def oc_cmspepr_hgcal_core(inst):
+    """
+    Runs the pure-Python OC implementation from cmspepr_hgcal_core.
+    """
+    try:
+        import cmspepr_hgcal_core.objectcondensation as objectcondensation
+    except ImportError:
+        print('Install cmspepr_hgcal_core to run this test')
+        return
+
+    objectcondensation.ObjectCondensation.beta_term_option = 'short_range_potential'
+    objectcondensation.ObjectCondensation.sB = 1.0
+
+    loss_py = objectcondensation.oc_loss(
+        inst.model_out, Data(y=inst.y, batch=inst.batch)
+    )
+    losses_py = torch.FloatTensor(
+        [
+            loss_py["V_att"],
+            loss_py["V_rep"],
+            loss_py["L_beta_sig"],
+            loss_py["L_beta_cond_logterm"],
+            loss_py["L_beta_noise"],
+        ]
+    )
+    return losses_py
 
 
 # Single event
@@ -116,6 +147,47 @@ class multiple:
     beta = torch.sigmoid(model_out[:, 0]).contiguous()
     q = calc_q_betaclip(beta).contiguous()
 
+    cond_indices = torch.IntTensor([4, 7, 9])
+    cond_counts = torch.IntTensor([2, 2, 2])
+    cond_row_splits = torch.IntTensor([0, 1, 3])
+    # fmt: off
+    which_cond_point = torch.IntTensor([
+        -1, -1, 4, -1, 4,
+        9,  -1, 7, -1, 9, 7
+        ])
+    # fmt: on
+
+
+class multiple_gpu:
+    model_out = multiple.model_out.to(gpu)
+    x = multiple.x.to(gpu)
+    y = multiple.y.type(torch.int).to(gpu)
+    batch = multiple.batch.to(gpu)
+    row_splits = multiple.row_splits.to(gpu)
+    beta = multiple.beta.to(gpu)
+    q = multiple.q.to(gpu)
+    cond_indices = multiple.cond_indices.to(gpu)
+    cond_counts = multiple.cond_counts.to(gpu)
+    cond_row_splits = multiple.cond_row_splits.to(gpu)
+    which_cond_point = multiple.which_cond_point.to(gpu)
+
+
+def test_analyze_cond_points():
+    from torch_cmspepr.objectcondensation import analyze_cond_points
+    cond_indices, cond_counts, cond_row_splits, which_cond_point = analyze_cond_points(
+        multiple.q,
+        multiple.y.type(torch.int),
+        multiple.row_splits
+        )
+    print(f'{cond_indices=}')
+    print(f'{cond_counts=}')
+    print(f'{cond_row_splits=}')
+    print(f'{which_cond_point=}')
+    assert torch.allclose(cond_indices, multiple.cond_indices)
+    assert torch.allclose(cond_counts, multiple.cond_counts)
+    assert torch.allclose(cond_row_splits, multiple.cond_row_splits)
+    assert torch.allclose(which_cond_point, multiple.which_cond_point)
+
 
 def test_oc_cpu_batch():
     torch.ops.load_library(osp.join(SO_DIR, 'oc_cpu.so'))
@@ -188,3 +260,55 @@ def test_oc_python_batch():
     print(losses)
     # Lots of rounding errors in python vs c++, can't compare too rigorously
     assert torch.allclose(losses, losses_py, rtol=0.01, atol=0.01)
+
+
+def test_oc_gpu_batch():
+    torch.ops.load_library(osp.join(SO_DIR, 'oc_cuda.so'))
+    torch.ops.load_library(osp.join(SO_DIR, 'oc_cpu.so'))
+    print('Running CPU extension')
+    losses_cpp = torch.ops.oc_cpu.oc_cpu(
+        multiple.beta,
+        multiple.q,
+        multiple.x,
+        multiple.y.type(torch.int),
+        multiple.row_splits,
+        )
+    print('Running CUDA extension')
+    losses_cuda = torch.ops.oc_cuda.oc_cuda(
+        multiple_gpu.beta,
+        multiple_gpu.q,
+        multiple_gpu.x,
+        multiple_gpu.y,
+        multiple_gpu.which_cond_point,
+        multiple_gpu.row_splits,
+        multiple_gpu.cond_row_splits,
+        multiple_gpu.cond_indices,
+        multiple_gpu.cond_counts
+        ).cpu()
+    print(f'{losses_cuda=}')
+    print(f'{losses_cpp=}')
+    # Don't compare L_beta_cond_logterm and L_noise losses here
+    assert torch.allclose(losses_cuda[:3], losses_cpp[:3])
+
+
+def test_oc_python_gpu_batch():
+    import torch_cmspepr
+    print('Running CPU extension')
+    losses_cpp = torch_cmspepr.oc(
+        multiple.beta,
+        multiple.q,
+        multiple.x,
+        multiple.y,
+        multiple.batch
+        )
+    print('Running CUDA extension')
+    losses_cuda = torch_cmspepr.oc(
+        multiple_gpu.beta,
+        multiple_gpu.q,
+        multiple_gpu.x,
+        multiple_gpu.y,
+        multiple_gpu.batch
+        ).cpu()
+    print(f'{losses_cuda=}')
+    print(f'{losses_cpp=}')
+    assert torch.allclose(losses_cuda, losses_cpp)
