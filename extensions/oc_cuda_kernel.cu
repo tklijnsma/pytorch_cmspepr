@@ -59,39 +59,47 @@ __global__ void oc_kernel(
     const size_t cond_end = cond_indices_row_splits[i_event+1];
     const int32_t i_cond = which_cond_point[i_node];
 
-    // V_att and V_srp
-    if (i_cond == -1 || i_node == (size_t)i_cond){
-        // Noise node, or a condensation point itself
-        V_att[i_node] = 0.;
-        V_srp[i_node] = 0.;
-        }
-    else {
-        scalar_t d_sq = calc_dist_sq(i_node, i_cond, x, n_dim_cluster_space);
-        scalar_t d = sqrt(d_sq);
-        scalar_t d_huber = d+0.00001 <= 4.0 ?  d_sq  :  2.0 * 4.0 * (d - 4.0) ;
-        V_att[i_node] = d_huber * q[i_node] * q[i_cond] / (scalar_t)n_nodes;
-        // V_srp must still be normalized! This is done in the V_rep loop because the
-        // normalization numbers are easier to access there.
-        V_srp[i_node] = 1. / (20.*d_sq + 1.);
+    const scalar_t q_node = q[i_node];
+    // For noise hits, set q_cond and d(_sq/_huber) to 0.
+    const scalar_t q_cond = (i_cond == -1) ? 0. : q[i_cond];
+    const scalar_t d_sq = (i_cond == -1) ? 0. : calc_dist_sq(i_node, i_cond, x, n_dim_cluster_space);
+    const scalar_t d = sqrt(d_sq);
+    const scalar_t d_huber = d+0.00001 <= 4.0 ?  d_sq  :  2.0 * 4.0 * (d - 4.0) ;
+
+    const bool is_noise = (i_cond == -1);
+    const bool is_cond_point = (i_node == i_cond);
+
+    // We also need the index of the condensation point in the cond_counts array,
+    // which is n_cond long.
+    // This is a little confusing.
+    // The condensation point has a *node index*, but it is also the nth condensation
+    // point, which is the index you need to access cond_counts[n].
+    int32_t nth_cond_point_index = -1;
+    for (int32_t i=cond_start; i<cond_end; i++) {
+        // Basically: if (cond_indices[i] == i_cond) nth_cond_point_index = i;
+        nth_cond_point_index += (cond_indices[i] == i_cond) * (i+1);
         }
 
+    // Save the count of the cluster (i.e. number of nodes in the cluster i_node belongs to)
+    // Basically: is_noise ? cond_counts[nth_cond_point_index] : 1
+    int32_t count_this_cond_point = 1 + (!is_noise) * (cond_counts[nth_cond_point_index]-1);
+
+    // V_att and V_srp
+    // Both will be zero for noise or if this node is a condensation point itself.
+    // This is ensured by setting d_uber/d_sq/q_cond to 0. for these points.
+    V_att[i_node] = d_huber * q_node * q_cond / (scalar_t)n_nodes;
+    V_srp[i_node] = 1. / (20.*d_sq + 1.) / (scalar_t)(cond_end-cond_start) / (scalar_t)count_this_cond_point;
+
     // V_rep
-    V_rep[i_node] = 0.;
+    scalar_t V_rep_this = 0.;
     for (int32_t i=cond_start; i<cond_end; i++) {
+        if (i == nth_cond_point_index) continue; // Don't repulse off of cond point of same cluster
         int32_t i_cond_other = cond_indices[i];
-        if (i_cond_other == i_cond){
-            // Still have to normalize V_srp; this is a convenient albeit awkward time
-            // to do so.
-            V_srp[i_node] *= -beta[i_cond] / (scalar_t)cond_counts[i] / (scalar_t)(cond_end-cond_start);
-            // Should not repulse from own cond point, so skip V_rep calculation
-            continue;
-            }
-        scalar_t d_sq = calc_dist_sq(i_node, i_cond_other, x, n_dim_cluster_space);
-        scalar_t V_rep_this = exp(-4.0 * d_sq) * q[i_node] * q[i_cond_other];
-        if (V_rep_this < 0.) V_rep_this = 0.;
-        V_rep[i_node] += V_rep_this;
+        scalar_t d_sq_other = calc_dist_sq(i_node, i_cond_other, x, n_dim_cluster_space);
+        scalar_t tmp = exp(-4.0 * d_sq_other) * q_node * q[i_cond_other];
+        V_rep_this += (tmp > 0.) ? tmp : 0.;
         }
-    V_rep[i_node] /= (scalar_t)n_nodes;
+    V_rep[i_node] = V_rep_this / (scalar_t)n_nodes;
 }
 
 
