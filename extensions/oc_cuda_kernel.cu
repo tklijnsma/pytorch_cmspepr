@@ -62,6 +62,7 @@ __global__ void oc_kernel(
     const scalar_t q_node = q[i_node];
     // For noise hits, set q_cond and d(_sq/_huber) to 0.
     const scalar_t q_cond = (i_cond == -1) ? 0. : q[i_cond];
+    const scalar_t beta_cond = (i_cond == -1) ? 0. : beta[i_cond];
     const scalar_t d_sq = (i_cond == -1) ? 0. : calc_dist_sq(i_node, i_cond, x, n_dim_cluster_space);
     const scalar_t d = sqrt(d_sq);
     const scalar_t d_huber = d+0.00001 <= 4.0 ?  d_sq  :  2.0 * 4.0 * (d - 4.0) ;
@@ -88,7 +89,8 @@ __global__ void oc_kernel(
     // Both will be zero for noise or if this node is a condensation point itself.
     // This is ensured by setting d_uber/d_sq/q_cond to 0. for these points.
     V_att[i_node] = d_huber * q_node * q_cond / (scalar_t)n_nodes;
-    V_srp[i_node] = 1. / (20.*d_sq + 1.) / (scalar_t)(cond_end-cond_start) / (scalar_t)count_this_cond_point;
+    V_srp[i_node] = (!is_cond_point) * -beta_cond / (20.*d_sq + 1.) / (scalar_t)(cond_end-cond_start) / (scalar_t)count_this_cond_point;
+
 
     // V_rep
     scalar_t V_rep_this = 0.;
