@@ -45,11 +45,11 @@ cuda_kwargs = dict(
     extra_link_args=['-s']
     )
 extensions_cuda = [
-    # CUDAExtension(
-    #     'select_knn_cuda',
-    #     ['extensions/select_knn_cuda.cpp', 'extensions/select_knn_cuda_kernel.cu'],
-    #     **cuda_kwargs
-    #     ),
+    CUDAExtension(
+        'select_knn_cuda',
+        ['extensions/select_knn_cuda.cpp', 'extensions/select_knn_cuda_kernel.cu'],
+        **cuda_kwargs
+        ),
     CUDAExtension(
         'oc_cuda',
         ['extensions/oc_cuda.cpp', 'extensions/oc_cuda_kernel.cu'],
