@@ -35,31 +35,28 @@ cpu_kwargs = dict(
     extra_compile_args={'cxx': ['-O2']},
     extra_link_args=['-s']
     )
-extensions_cpu = [
+extensions = [
     CppExtension('select_knn_cpu', ['extensions/select_knn_cpu.cpp'], **cpu_kwargs),
     CppExtension('oc_cpu', ['extensions/oc_cpu.cpp'], **cpu_kwargs)
     ]
-cuda_kwargs = dict(
-    include_dirs=[extensions_dir],
-    extra_compile_args={'cxx': ['-O2'], 'nvcc': ['--expt-relaxed-constexpr', '-O2']},
-    extra_link_args=['-s']
-    )
-extensions_cuda = [
-    # CUDAExtension(
-    #     'select_knn_cuda',
-    #     ['extensions/select_knn_cuda.cpp', 'extensions/select_knn_cuda_kernel.cu'],
-    #     **cuda_kwargs
-    #     ),
-    CUDAExtension(
-        'oc_cuda',
-        ['extensions/oc_cuda.cpp', 'extensions/oc_cuda_kernel.cu'],
-        **cuda_kwargs
-        ),
-    ]
-
-extensions = []
-if DO_CPU: extensions.extend(extensions_cpu)
-if DO_CUDA: extensions.extend(extensions_cuda)
+if DO_CUDA:
+    cuda_kwargs = dict(
+        include_dirs=[extensions_dir],
+        extra_compile_args={'cxx': ['-O2'], 'nvcc': ['--expt-relaxed-constexpr', '-O2']},
+        extra_link_args=['-s']
+        )
+    extensions.extend([
+        CUDAExtension(
+            'select_knn_cuda',
+            ['extensions/select_knn_cuda.cpp', 'extensions/select_knn_cuda_kernel.cu'],
+            **cuda_kwargs
+            ),
+        CUDAExtension(
+            'oc_cuda',
+            ['extensions/oc_cuda.cpp', 'extensions/oc_cuda_kernel.cu'],
+            **cuda_kwargs
+            ),
+        ])
 
 
 # Print extensions
