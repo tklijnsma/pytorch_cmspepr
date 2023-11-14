@@ -1,7 +1,78 @@
 from typing import Tuple
 import torch
 
+from torch_cmspepr import _loaded_ops
 from .utils import batch_to_row_splits
+
+
+# JIT compile the interface to the extensions.
+# Do not try to compile torch.ops.oc_* if those ops aren't actually loaded!
+if 'oc_cpu.so' in _loaded_ops:
+
+    @torch.jit.script
+    def oc_cpu(
+        beta: torch.FloatTensor,
+        q: torch.FloatTensor,
+        x: torch.FloatTensor,
+        y: torch.IntTensor,
+        row_splits: torch.IntTensor,
+    ) -> torch.FloatTensor:
+        return torch.ops.oc_cpu.oc_cpu(beta, q, x, y, row_splits)
+
+else:
+
+    @torch.jit.script
+    def oc_cpu(
+        beta: torch.FloatTensor,
+        q: torch.FloatTensor,
+        x: torch.FloatTensor,
+        y: torch.IntTensor,
+        row_splits: torch.IntTensor,
+    ) -> torch.FloatTensor:
+        raise Exception('CPU extension for object condensation not installed')
+
+
+if 'oc_cuda.so' in _loaded_ops:
+
+    @torch.jit.script
+    def oc_cuda(
+        beta: torch.FloatTensor,
+        q: torch.FloatTensor,
+        x: torch.FloatTensor,
+        y: torch.IntTensor,
+        which_cond_point: torch.IntTensor,
+        row_splits: torch.IntTensor,
+        cond_row_splits: torch.IntTensor,
+        cond_indices: torch.IntTensor,
+        cond_counts: torch.IntTensor,
+    ) -> torch.FloatTensor:
+        return torch.ops.oc_cuda.oc_cuda(
+            beta,
+            q,
+            x,
+            y,
+            which_cond_point,
+            row_splits,
+            cond_row_splits,
+            cond_indices,
+            cond_counts,
+        )
+
+else:
+
+    @torch.jit.script
+    def oc_cuda(
+        beta: torch.FloatTensor,
+        q: torch.FloatTensor,
+        x: torch.FloatTensor,
+        y: torch.IntTensor,
+        which_cond_point: torch.IntTensor,
+        row_splits: torch.IntTensor,
+        cond_row_splits: torch.IntTensor,
+        cond_indices: torch.IntTensor,
+        cond_counts: torch.IntTensor,
+    ) -> torch.FloatTensor:
+        raise Exception('CUDA extension for object condensation not installed')
 
 
 @torch.jit.script
@@ -63,7 +134,7 @@ def oc(
     y: torch.LongTensor,  # Use long for consistency
     batch: torch.LongTensor,  # Use long for consistency
     sB: float = 1.0,
-):
+) -> torch.FloatTensor:
     """
     Calculate the object condensation loss function.
 
@@ -95,7 +166,7 @@ def oc(
     row_splits = batch_to_row_splits(batch).type(torch.int)
 
     if device == torch.device('cpu'):
-        return torch.ops.oc_cpu.oc_cpu(beta, q, x, y.type(torch.int), row_splits)
+        return oc_cpu(beta, q, x, y.type(torch.int), row_splits)
     else:
         # GPU needs more prep work in python
         # Determine condensation point indices, counts, and event boundaries
@@ -106,7 +177,7 @@ def oc(
             cond_row_splits,
             which_cond_point,
         ) = analyze_cond_points(q, y, row_splits)
-        losses = torch.ops.oc_cuda.oc_cuda(
+        losses = oc_cuda(
             beta,
             q,
             x,
