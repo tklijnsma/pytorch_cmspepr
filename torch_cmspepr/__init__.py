@@ -3,7 +3,7 @@ import os.path as osp
 import logging
 import torch
 
-__version__ = '1.0.1'
+__version__ = '1.1.0'
 
 
 def setup_logger(name: str = "cmspepr") -> logging.Logger:
@@ -53,8 +53,10 @@ def load_ops(so_file):
 THISDIR = osp.dirname(osp.abspath(__file__))
 load_ops(osp.join(THISDIR, "../select_knn_cpu.so"))
 load_ops(osp.join(THISDIR, "../select_knn_cuda.so"))
-
+load_ops(osp.join(THISDIR, "../oc_cpu.so"))
+load_ops(osp.join(THISDIR, "../oc_cuda.so"))
 
 from torch_cmspepr.select_knn import select_knn, knn_graph
+from torch_cmspepr.objectcondensation import oc
 
-__all__ = ['select_knn', 'knn_graph', 'logger']
+__all__ = ['select_knn', 'knn_graph', 'oc', 'logger']

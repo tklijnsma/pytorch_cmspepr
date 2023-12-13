@@ -1,9 +1,13 @@
 # pytorch_cmspepr
 
-pytorch bindings for optimized knn and aggregation kernels
+pytorch bindings for optimized knn and aggregation kernels.
+
+Now also has extensions for the [Object Condensation](https://arxiv.org/abs/2002.03605) loss function.
 
 
 ## Example
+
+kNN:
 
 ```python
 >>> import torch
@@ -42,6 +46,25 @@ tensor([[0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8],
 >>> torch_cmspepr.knn_graph(nodes.to(gpu), 2, batch.to(gpu), max_radius=.2)
 tensor([[0, 1, 1, 2, 2, 3, 5, 6, 6, 7, 7, 8],
         [1, 0, 2, 1, 3, 2, 6, 5, 7, 6, 8, 7]], device='cuda:0')
+```
+
+Object condensation:
+
+```py
+>>> import torch
+>>> import torch_cmspepr
+>>> beta = torch.FloatTensor([0.5025, 0.5050, 0.5300, 0.5025, 0.5325])
+>>> q = torch.FloatTensor([1.3039, 1.3076, 1.3465, 1.3039, 1.3506])
+>>> x = torch.FloatTensor([[0.4000, 0.4000],
+...     [0.1000, 0.9000],
+...     [0.7000, 0.7000],
+...     [0.9000, 0.1000],
+...     [0.7200, 0.7200]])
+>>> y = torch.LongTensor([0, 0, 1, 0, 1])
+>>> batch = torch.LongTensor([0, 0, 0, 0, 0])
+>>> torch_cmspepr.oc(beta, q, x, y, batch)
+tensor([ 2.9097e-04,  2.8841e-01, -2.6206e-01,  1.2603e-01,  5.0333e-01])
+#        V_att        V_rep       V_srp         L_beta_cond  L_beta_noise
 ```
 
 
@@ -121,7 +144,7 @@ pytest tests
 
 ## Performance
 
-The following profiling code can be used:
+The following profiling code can be used (see the script [performance.py](scripts/performance.py)):
 
 ```python
 import time
@@ -172,3 +195,6 @@ CPU (torch_cluster) took 0.2259768319129944 sec/evt
 CUDA (torch_cmspepr) took 0.026673252582550048 sec/evt
 CUDA (torch_cluster) took 0.22262062072753908 sec/evt
 ```
+
+Similarly, there is a profiling script available for object condensation, see [performance_oc.py](scripts/performance_oc.py).
+Here a 3x speed up is achieved w.r.t. to the pure-Python implementation of object condensation, but more importantly, memory consumption is drastically reduced.

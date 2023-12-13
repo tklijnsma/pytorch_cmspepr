@@ -37,6 +37,7 @@ cpu_kwargs = dict(
     )
 extensions = [
     CppExtension('select_knn_cpu', ['extensions/select_knn_cpu.cpp'], **cpu_kwargs),
+    CppExtension('oc_cpu', ['extensions/oc_cpu.cpp'], **cpu_kwargs),
     ]
 if DO_CUDA:
     cuda_kwargs = dict(
@@ -48,6 +49,11 @@ if DO_CUDA:
         CUDAExtension(
             'select_knn_cuda',
             ['extensions/select_knn_cuda.cpp', 'extensions/select_knn_cuda_kernel.cu'],
+            **cuda_kwargs
+            ),
+        CUDAExtension(
+            'oc_cuda',
+            ['extensions/oc_cuda.cpp', 'extensions/oc_cuda_kernel.cu'],
             **cuda_kwargs
             ),
         ])
@@ -74,7 +80,7 @@ print('---------------------')
 tests_require = ['pytest', 'pytest-cov', 'scipy']
 setup(
     name='torch_cmspepr',
-    version='1.0.0',
+    version='1.1.0',
     author='Lindsey Gray <Lindsey.Gray@cern.ch>, Jan Kieseler <jan.kieseler@cern.ch>, Thomas Klijnsma <thomasklijnsma@gmail.com>',
     author_email='Lindsey.Gray@cern.ch',
     url='',
