@@ -84,6 +84,7 @@ def test_select_knn_op_cpu():
     assert torch.allclose(neigh_indices, expected_neigh_indices)
     assert torch.allclose(neigh_dist_sq, expected_neigh_dist_sq)
 
+
 @pytest.mark.skipif(
     not CUDA_INSTALLED,
     reason='CUDA extension for select_knn not installed',

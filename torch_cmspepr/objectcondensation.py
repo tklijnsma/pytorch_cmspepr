@@ -8,11 +8,11 @@ from .utils import batch_to_row_splits
 def calc_q_betaclip(beta, qmin=1.0):
     """
     Clip beta values.
-    
+
     Parameters:
         beta (ndarray): An array of beta values.
         qmin (float, optional): The minimum value of q. Defaults to 1.0.
-        
+
     Returns:
         ndarray: An array of clipped beta values.
     """
@@ -94,15 +94,16 @@ def cond_point_indices_and_counts(
         i_max = torch.zeros(n_cond, device=device, dtype=torch.int)
         q_max = torch.zeros(n_cond, device=device, dtype=torch.float)
         counts = torch.zeros(n_cond, device=device, dtype=torch.int)
-        
+
         for i_node in range(int(left), int(right)):
-            y_ = y[i_node] # Truth cluster number of the node
-            if y[i_node] == 0: continue # Noise has no cond point, continue
+            y_ = y[i_node]  # Truth cluster number of the node
+            if y[i_node] == 0:
+                continue  # Noise has no cond point, continue
             # Subtract 1: Put cluster 1 in index 0, 2 in 1, etc.
-            counts[y_-1] += 1
-            if q_max[y_-1] < q[i_node]:
-                q_max[y_-1] = float(q[i_node])
-                i_max[y_-1] = i_node
+            counts[y_ - 1] += 1
+            if q_max[y_ - 1] < q[i_node]:
+                q_max[y_ - 1] = float(q[i_node])
+                i_max[y_ - 1] = i_node
 
         # Fill in to which cond point the nodes belong
         signal_node_indices = left + torch.nonzero(y[left:right]).squeeze(dim=-1)
@@ -119,6 +120,7 @@ def cond_point_indices_and_counts(
 # JIT compile the interface to the extensions.
 # Do not try to compile torch.ops.oc_* if those ops aren't actually loaded!
 if 'oc_cuda.so' in _loaded_ops:
+
     @torch.jit.script
     def oc_cuda(
         beta,
@@ -130,7 +132,7 @@ if 'oc_cuda.so' in _loaded_ops:
         cond_row_splits,
         cond_indices,
         cond_counts,
-        ) -> torch.Tensor:
+    ) -> torch.Tensor:
         return torch.ops.oc_cuda.oc_cuda(
             beta,
             q,
@@ -142,7 +144,9 @@ if 'oc_cuda.so' in _loaded_ops:
             cond_indices,
             cond_counts,
         )
+
 else:
+
     @torch.jit.script
     def oc_cuda(
         beta,
@@ -154,14 +158,18 @@ else:
         cond_row_splits,
         cond_indices,
         cond_counts,
-        ) -> torch.Tensor:
+    ) -> torch.Tensor:
         raise Exception('CUDA extension for oc not installed')
 
+
 if 'oc_cpu.so' in _loaded_ops:
+
     @torch.jit.script
     def oc_cpu(beta, q, x, y, row_splits) -> torch.Tensor:
         return torch.ops.oc_cpu.oc_cpu(beta, q, x, y, row_splits)
+
 else:
+
     @torch.jit.script
     def oc_cpu(beta, q, x, y, row_splits) -> torch.Tensor:
         raise Exception('CPU extension for oc not installed')
@@ -251,6 +259,7 @@ def oc(
         losses[4] = L_beta_noise / float(n_events)
         return losses
 
+
 @torch.jit.script
 def oc_noext(
     beta: torch.FloatTensor,
@@ -258,7 +267,7 @@ def oc_noext(
     x: torch.FloatTensor,
     y: torch.LongTensor,  # Use long for consistency
     batch: torch.LongTensor,  # Use long for consistency
-    ) -> torch.FloatTensor:
+) -> torch.FloatTensor:
     """
     Calculate the object condensation loss function.
     Uses no extensions.
@@ -283,7 +292,7 @@ def oc_noext(
     y = y.type(torch.int)
     cond_point_index, cond_point_count = cond_point_indices_and_counts(q, y, row_splits)
 
-    is_noise = (y==0)
+    is_noise = y == 0
 
     V_att = torch.zeros(N)
     V_srp = torch.zeros(N)
@@ -294,14 +303,16 @@ def oc_noext(
 
     for i_event in range(n_events):
         left = int(row_splits[i_event])
-        right = int(row_splits[i_event+1])
+        right = int(row_splits[i_event + 1])
 
         # Number of nodes and number of condensation points in this event
-        n = float(row_splits[i_event+1] - row_splits[i_event])
+        n = float(row_splits[i_event + 1] - row_splits[i_event])
         n_cond = float(y[left:right].max())
 
         # Indices of the condensation points in this event
-        cond_point_indices = left + (cond_point_count[left:right] > 0).nonzero().squeeze(dim=-1)
+        cond_point_indices = left + (
+            cond_point_count[left:right] > 0
+        ).nonzero().squeeze(dim=-1)
         # Indices of the noise nodes in this event
         noise_indices = left + is_noise[left:right].nonzero().squeeze(dim=-1)
 
@@ -313,28 +324,46 @@ def oc_noext(
                 # Noise point or condensation point: V_att and V_srp are 0
                 pass
             else:
-                d_sq = torch.sum((x[i] - x[i_cond])**2)
+                d_sq = torch.sum((x[i] - x[i_cond]) ** 2)
                 d = torch.sqrt(d_sq)
                 d_plus_eps = d + 0.00001
-                d_huber = d_plus_eps**2 if d_plus_eps <= 4.0 else 2.0 * 4.0 * (d_plus_eps - 4.0)
+                d_huber = (
+                    d_plus_eps**2
+                    if d_plus_eps <= 4.0
+                    else 2.0 * 4.0 * (d_plus_eps - 4.0)
+                )
                 V_att[i] = d_huber * q[i] * q[i_cond] / n
                 V_srp[i] = (
-                    -beta[i_cond] / (20.*d_sq + 1.)
-                    / float(cond_point_count[i_cond]) # Number of nodes belonging to cond point
-                    / n_cond # Number of condensation points in event
-                    ) 
+                    -beta[i_cond]
+                    / (20.0 * d_sq + 1.0)
+                    / float(
+                        cond_point_count[i_cond]
+                    )  # Number of nodes belonging to cond point
+                    / n_cond  # Number of condensation points in event
+                )
 
             # V_rep
             for i_cond_other in cond_point_indices:
-                if i_cond_other == i_cond: continue # Don't repulse from own cond point
-                d_sq = torch.sum((x[i] - x[i_cond_other])**2)
+                if i_cond_other == i_cond:
+                    continue  # Don't repulse from own cond point
+                d_sq = torch.sum((x[i] - x[i_cond_other]) ** 2)
                 V_rep[i] += torch.exp(-4.0 * d_sq) * q[i] * q[i_cond_other] / n
 
-        L_beta_cond_logterm[i_event] = -0.2 * torch.log(beta[cond_point_indices] + 1e-9).mean()
+        L_beta_cond_logterm[i_event] = (
+            -0.2 * torch.log(beta[cond_point_indices] + 1e-9).mean()
+        )
         L_beta_noise[i_event] = beta[noise_indices].mean()
 
     n_events = float(n_events)
-    return torch.stack([
-        V_att.sum(), V_rep.sum(), V_srp.sum(),
-        L_beta_cond_logterm.sum(), L_beta_noise.sum()
-        ])/n_events
+    return (
+        torch.stack(
+            [
+                V_att.sum(),
+                V_rep.sum(),
+                V_srp.sum(),
+                L_beta_cond_logterm.sum(),
+                L_beta_noise.sum(),
+            ]
+        )
+        / n_events
+    )

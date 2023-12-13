@@ -48,9 +48,7 @@ def test_oc_performance():
         model_out, y, batch, row_splits = make_random_event()
         data = Data(y=y.type(torch.long), batch=batch)
         beta = torch.sigmoid(model_out[:, 0]).contiguous()
-        q = torch_cmspepr.calc_q_betaclip(
-            torch.sigmoid(model_out[:, 0])
-        ).contiguous()
+        q = torch_cmspepr.calc_q_betaclip(torch.sigmoid(model_out[:, 0])).contiguous()
         x = model_out[:, 1:].contiguous()
 
         t0 = time.perf_counter()

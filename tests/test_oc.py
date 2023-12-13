@@ -2,7 +2,6 @@ import os.path as osp
 from math import log
 import pytest
 import torch
-from torch_geometric.data import Data
 
 import torch_cmspepr
 
@@ -164,6 +163,7 @@ class double:
 # fmt: on
 
 if torch.cuda.is_available():
+
     class double_gpu:
         model_out = double.model_out.to(gpu)
         x = double.x.to(gpu)
@@ -184,19 +184,26 @@ def test_oc_noext_single():
     print(f'{single.x=}')
     print(f'{single.y=}')
     print(f'{single.batch=}')
-    losses = torch_cmspepr.oc_noext(single.beta, single.q, single.x, single.y, single.batch)
+    losses = torch_cmspepr.oc_noext(
+        single.beta, single.q, single.x, single.y, single.batch
+    )
     losses_man = single.losses()
     print(f'{losses=}')
     print(f'{losses_man=}')
     assert torch.allclose(losses, losses_man, rtol=0.001, atol=0.001)
 
+
 def test_oc_noext_double():
     import torch_cmspepr
-    losses = torch_cmspepr.oc_noext(double.beta, double.q, double.x, double.y, double.batch)
+
+    losses = torch_cmspepr.oc_noext(
+        double.beta, double.q, double.x, double.y, double.batch
+    )
     losses_man = double.losses()
     print(f'{losses=}')
     print(f'{losses_man=}')
     assert torch.allclose(losses, losses_man, rtol=0.001, atol=0.001)
+
 
 @pytest.mark.skipif(
     not CPU_INSTALLED,
@@ -272,6 +279,7 @@ def test_oc_cpu_double():
 )
 def test_oc_python_batch():
     import torch_cmspepr
+
     losses = torch_cmspepr.oc(
         double.beta,
         double.q,

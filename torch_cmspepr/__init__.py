@@ -59,4 +59,4 @@ load_ops(osp.join(THISDIR, "../oc_cuda.so"))
 from torch_cmspepr.select_knn import select_knn, knn_graph
 from torch_cmspepr.objectcondensation import oc, oc_noext, calc_q_betaclip
 
-__all__ = ['select_knn', 'knn_graph', 'oc', 'logger']
+__all__ = ['select_knn', 'knn_graph', 'oc', 'oc_noext', 'calc_q_betaclip', 'logger']
