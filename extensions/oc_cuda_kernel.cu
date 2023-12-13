@@ -82,7 +82,7 @@ __global__ void oc_kernel(
         }
 
     // Save the count of the cluster (i.e. number of nodes in the cluster i_node belongs to)
-    // Basically: is_noise ? cond_counts[nth_cond_point_index] : 1
+    // Basically: is_noise ? 1 : cond_counts[nth_cond_point_index]
     int32_t count_this_cond_point = 1 + (!is_noise) * (cond_counts[nth_cond_point_index]-1);
 
     // V_att and V_srp
