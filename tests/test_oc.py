@@ -205,6 +205,18 @@ def test_oc_noext_double():
     assert torch.allclose(losses, losses_man, rtol=0.001, atol=0.001)
 
 
+def test_oc_noext_jit_double():
+    import torch_cmspepr
+
+    losses = torch_cmspepr.oc_noext_jit(
+        double.beta, double.q, double.x, double.y, double.batch
+    )
+    losses_man = double.losses()
+    print(f'{losses=}')
+    print(f'{losses_man=}')
+    assert torch.allclose(losses, losses_man, rtol=0.001, atol=0.001)
+
+
 @pytest.mark.skipif(
     not CPU_INSTALLED,
     reason='CPU extension for oc not installed',

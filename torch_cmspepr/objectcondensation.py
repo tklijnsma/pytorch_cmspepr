@@ -260,7 +260,7 @@ def oc(
         return losses
 
 
-@torch.jit.script
+
 def oc_noext(
     beta: torch.FloatTensor,
     q: torch.FloatTensor,
@@ -367,3 +367,14 @@ def oc_noext(
         )
         / n_events
     )
+
+
+@torch.jit.script
+def oc_noext_jit(
+    beta: torch.FloatTensor,
+    q: torch.FloatTensor,
+    x: torch.FloatTensor,
+    y: torch.LongTensor,  # Use long for consistency
+    batch: torch.LongTensor,  # Use long for consistency
+) -> torch.FloatTensor:
+    return oc_noext(beta, q, x, y, batch)
