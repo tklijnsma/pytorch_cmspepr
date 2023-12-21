@@ -350,3 +350,82 @@ def test_oc_interface_gpu_double():
     losses_man = double.losses()
     print(f'{losses_man=}')
     assert torch.allclose(losses_cuda, losses_man)
+
+
+
+
+# ____________________________________________________________
+# OC gradient calculations
+
+OC_GRAD_CPU_INSTALLED = osp.isfile(osp.join(SO_DIR, 'oc_grad_cpu.so'))
+
+
+# fmt: off
+# Generate some carefully crafted test data
+def oc_grad_event():
+    # Input feature data
+    f = torch.tensor([
+        [1.,  10.],
+        [2.,  2.],
+        [3.,  6.],
+        [2.,  4.],
+        [2.5, 2.2],
+        ], requires_grad=True)
+    # Weights matrix
+    w = torch.tensor([
+        [ 1.1, 1., 1.],
+        [-1.0, 1., 1.],
+        ], requires_grad=True)
+
+    model_out = f.matmul(w)
+    # model_out_exp = torch.tensor([   # y
+    #     [-8.9000, 11.0000, 11.0000], # 0
+    #     [ 0.2000,  4.0000,  4.0000], # 1
+    #     [-2.7000,  9.0000,  9.0000], # 0
+    #     [-1.8000,  6.0000,  6.0000], # 0
+    #     [ 0.5500,  4.7000,  4.7000]  # 1 <-- cond point
+    #     ], requires_grad=False)
+    # assert torch.allclose(model_out, model_out_exp)
+
+    x = model_out[:,1:]
+    y = torch.LongTensor([0, 1, 0, 0, 1])
+    batch = torch.LongTensor([0, 0, 0, 0, 0])
+    row_splits = torch.LongTensor([0, 5])
+    which_cond_point = torch.LongTensor([-1, 4, -1, -1, 4])
+
+    beta = torch.sigmoid(model_out[:, 0])
+    q = torch_cmspepr.calc_q_betaclip(beta)
+    # fmt: on
+
+    return w, model_out, beta, q, x, y, batch, row_splits, which_cond_point
+
+
+
+@pytest.mark.skipif(
+    not OC_GRAD_CPU_INSTALLED,
+    reason='CPU extension for oc_grad not installed',
+)
+def test_oc_grad_ext():
+    torch.ops.load_library(osp.join(SO_DIR, 'oc_grad_cpu.so'))
+
+    # Run the manually calculated gradient
+    w_ext, model_out, beta, q, x, y, batch, row_splits, which_cond_point = oc_grad_event()
+    grad_input = torch.ops.oc_grad_cpu.oc_grad_cpu(
+        model_out,
+        beta,
+        q,
+        y,
+        which_cond_point,
+        row_splits,
+        )
+    model_out.backward(grad_input)
+
+    # Run the autograd version
+    w_autograd, model_out, beta, q, x, y, batch, row_splits, which_cond_point = oc_grad_event()
+    d = torch.sqrt(torch.sum((x[1] - x[4])**2))
+    L_att = torch_cmspepr.objectcondensation.huber(d, 4.0) * q[1] * q[4] / 5.
+    L_att.backward()
+
+    print(f'{w_ext.grad=}')
+    print(f'{w_autograd.grad=}')
+    assert torch.allclose(w_ext.grad, w_autograd.grad, rtol=0.01)

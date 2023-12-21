@@ -19,6 +19,24 @@ def calc_q_betaclip(beta, qmin=1.0):
     return (beta.clip(0.0, 1 - 1e-4) / 1.002).arctanh() ** 2 + qmin
 
 
+def huber(x, delta=4.):
+    """
+    Calculate the Huberized distances between two points.
+
+    Parameters:
+    - x (torch.Tensor): The input tensor representing the distances between two points.
+    - delta (float, optional): The threshold value. Defaults to 4.0.
+
+    Returns:
+    - torch.Tensor: The Huberized distances between two points.
+    """
+    return torch.where(
+        torch.abs(x) < delta,
+        x**2,
+        2 * delta * (torch.abs(x) - delta),
+        )
+
+
 @torch.jit.script
 def analyze_cond_points(
     q: torch.FloatTensor, y: torch.IntTensor, row_splits: torch.IntTensor
