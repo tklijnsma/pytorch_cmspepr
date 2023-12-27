@@ -392,12 +392,13 @@ def oc_grad_event():
     batch = torch.LongTensor([0, 0, 0, 0, 0])
     row_splits = torch.LongTensor([0, 5])
     which_cond_point = torch.LongTensor([-1, 4, -1, -1, 4])
+    cond_point_count = torch.LongTensor([0, 0, 0, 0, 2])
 
     beta = torch.sigmoid(model_out[:, 0])
     q = torch_cmspepr.calc_q_betaclip(beta)
     # fmt: on
 
-    return w, model_out, beta, q, x, y, batch, row_splits, which_cond_point
+    return w, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count
 
 
 
@@ -409,22 +410,29 @@ def test_oc_grad_ext():
     torch.ops.load_library(osp.join(SO_DIR, 'oc_grad_cpu.so'))
 
     # Run the manually calculated gradient
-    w_ext, model_out, beta, q, x, y, batch, row_splits, which_cond_point = oc_grad_event()
+    w_ext, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
     grad_input = torch.ops.oc_grad_cpu.oc_grad_cpu(
         model_out,
         beta,
         q,
         y,
         which_cond_point,
+        cond_point_count,
         row_splits,
         )
     model_out.backward(grad_input)
 
     # Run the autograd version
-    w_autograd, model_out, beta, q, x, y, batch, row_splits, which_cond_point = oc_grad_event()
+    w_autograd, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
     d = torch.sqrt(torch.sum((x[1] - x[4])**2))
-    L_att = torch_cmspepr.objectcondensation.huber(d, 4.0) * q[1] * q[4] / 5.
-    L_att.backward()
+    L_att = torch_cmspepr.objectcondensation.huber(d, 4.0) * q[1] * q[4] / 5.    
+    L_srp = -beta[4] / (20.0 * d**2 + 1.0) / float(cond_point_count[4]) / 1.
+    L_rep = torch.tensor(0.0)
+    for i in [0, 2, 3]:
+        d_sq = torch.sum((x[i] - x[4])**2)
+        L_rep += torch.exp(-4.*d_sq) * q[i] * q[4] / 5.
+    L = L_att + L_srp + L_rep
+    L.backward()
 
     print(f'{w_ext.grad=}')
     print(f'{w_autograd.grad=}')

@@ -89,6 +89,7 @@ oc_grad_cpu(
     torch::Tensor q,
     torch::Tensor y,
     torch::Tensor which_cond_point,
+    torch::Tensor cond_point_count,
     torch::Tensor row_splits
     ){
     torch::NoGradGuard no_grad;
@@ -105,15 +106,58 @@ oc_grad_cpu(
         int left = row_splits[i_event].item<int>();
         int right = row_splits[i_event + 1].item<int>();;
         float n = right - left;
+
+        // Number of condensation points in event (needed for L_srp)
+        float n_cond = static_cast<float>(y.slice(0, left, right).max().item().toFloat());
+
+        // Calculate the indices of the condensation points in this event.
+        // cond_point_count is only non-zero for condensation points, use that fact 
+        auto cond_point_indices = (cond_point_count.slice(0, left, right) > 0).nonzero().squeeze(1);
+        cond_point_indices += left; // Previous line has indices w.r.t. 0; add left to get indices w.r.t. left
+
         for (int i = left; i < right; i++) {
             int j = which_cond_point[i].item<int>();
-            if ((j==-1) || (j==i)) continue; // No attraction for noise or condensation point
-            auto d = torch::sqrt(torch::sum(torch::pow((x[i] - x[j]), 2)));
-            auto H = huber(d + 0.00001, 4.0);
-            grad_input[i][0] += H * q[j] * d_q(beta[i]) * d_sigmoid(model_output[i][0]) / n;
-            grad_input[j][0] += H * q[i] * d_q(beta[j]) * d_sigmoid(model_output[j][0]) / n;
-            grad_input[i].slice(/*dim=*/0, /*start=*/1) += q[i] * q[j] * d_huber(d, 4.0) * (1.0 / (2.0 * d)) * 2.0 * (x[i] - x[j]) / n;
-            grad_input[j].slice(/*dim=*/0, /*start=*/1) += q[i] * q[j] * d_huber(d, 4.0) * (1.0 / (2.0 * d)) * 2.0 * (x[j] - x[i]) / n;
+            
+            // No attraction for noise or condensation point
+            if (!((j==-1) || (j==i))){
+                auto d_sq = torch::sum(torch::pow((x[i] - x[j]), 2));
+                auto d = torch::sqrt(d_sq);
+                auto H = huber(d + 0.00001, 4.0);
+
+                // Attraction loss
+                grad_input[i][0] += H * q[j] * d_q(beta[i]) * d_sigmoid(model_output[i][0]) / n;
+                grad_input[j][0] += H * q[i] * d_q(beta[j]) * d_sigmoid(model_output[j][0]) / n;
+                grad_input[i].slice(/*dim=*/0, /*start=*/1) += q[i] * q[j] * d_huber(d, 4.0) * (1.0 / (2.0 * d)) * 2.0 * (x[i] - x[j]) / n;
+                grad_input[j].slice(/*dim=*/0, /*start=*/1) += q[i] * q[j] * d_huber(d, 4.0) * (1.0 / (2.0 * d)) * 2.0 * (x[j] - x[i]) / n;
+
+                // Short-range potential attraction
+                grad_input[i].slice(/*dim=*/0, /*start=*/1) += (
+                    -beta[j] / (n_cond * cond_point_count[j])
+                    * -1./torch::pow(20.0 * d_sq + 1.0, 2)
+                    * 40.*(x[i] - x[j])
+                );
+                grad_input[j].slice(/*dim=*/0, /*start=*/1) += (
+                    -beta[j] / (n_cond * cond_point_count[j])
+                    * -1./torch::pow(20.0 * d_sq + 1.0, 2)
+                    * 40.*(x[j] - x[i])
+                );
+                grad_input[j][0] += (
+                    -1./(20.0 * d_sq + 1.0)
+                    / (n_cond * cond_point_count[j])
+                    * d_sigmoid(model_output[j][0])
+                );
+            }
+
+            // Repulsion loss: Loop over _other_ condensation points
+            for (int k_idx = 0; k_idx < cond_point_indices.numel(); k_idx++){
+                int k = cond_point_indices[k_idx].item<int>();
+                if (k==j) continue; // Don't repulse from own cond point
+                auto d_sq = torch::sum(torch::pow((x[i] - x[k]), 2));
+                grad_input[i][0] += torch::exp(-4. * d_sq) * q[k] * d_q(beta[i]) * d_sigmoid(model_output[i][0]) / n;
+                grad_input[k][0] += torch::exp(-4. * d_sq) * q[i] * d_q(beta[k]) * d_sigmoid(model_output[k][0]) / n;
+                grad_input[i].slice(/*dim=*/0, /*start=*/1) += torch::exp(-4. * d_sq) * -8. * (x[i] - x[k]) * q[i] * q[k] / n;
+                grad_input[k].slice(/*dim=*/0, /*start=*/1) += torch::exp(-4. * d_sq) * -8. * (x[k] - x[i]) * q[i] * q[k] / n;
+            }
         }
     }
     return grad_input;
