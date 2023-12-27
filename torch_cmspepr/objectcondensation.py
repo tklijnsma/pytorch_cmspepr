@@ -396,3 +396,66 @@ def oc_noext_jit(
     batch: torch.LongTensor,  # Use long for consistency
 ) -> torch.FloatTensor:
     return oc_noext(beta, q, x, y, batch)
+
+
+# _______________________________________________________________________
+# Gradient calculation
+
+
+if 'oc_grad_cpu.so' in _loaded_ops:
+
+    @torch.jit.script
+    def oc_grad_cpu(
+        model_output,
+        beta,
+        q,
+        y,
+        which_cond_point,
+        cond_point_count,
+        row_splits,
+        ) -> torch.Tensor:
+        return torch.ops.oc_grad_cpu.oc_grad_cpu(
+            model_output,
+            beta,
+            q,
+            y,
+            which_cond_point,
+            cond_point_count,
+            row_splits,
+            )
+
+else:
+
+    @torch.jit.script
+    def oc_grad_cpu(
+        model_output,
+        beta,
+        q,
+        y,
+        which_cond_point,
+        cond_point_count,
+        row_splits,
+        ) -> torch.Tensor:
+        raise Exception('CPU extension for oc_grad not installed')
+
+
+class oc_loss_cpu(torch.autograd.Function):
+    def forward(ctx, model_output, beta, q, y, batch):
+        row_splits = batch_to_row_splits(batch).int()
+        which_cond_point, cond_point_count = cond_point_indices_and_counts(q, y.int(), row_splits)
+        ctx.save_for_backward(model_output, beta, q, y, which_cond_point, cond_point_count, row_splits)
+        return oc_cpu(beta, q, model_output, y.int(), row_splits).sum()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        model_output, beta, q, y, which_cond_point, cond_point_count, row_splits = ctx.saved_tensors
+        grad_input = oc_grad_cpu(
+            model_output,
+            beta,
+            q,
+            y,
+            which_cond_point,
+            cond_point_count,
+            row_splits,
+            )
+        return grad_input, None, None, None, None, None, None

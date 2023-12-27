@@ -437,3 +437,30 @@ def test_oc_grad_ext():
     print(f'{w_ext.grad=}')
     print(f'{w_autograd.grad=}')
     assert torch.allclose(w_ext.grad, w_autograd.grad, rtol=0.01)
+
+
+@pytest.mark.skipif(
+    not (OC_GRAD_CPU_INSTALLED and CPU_INSTALLED),
+    reason='CPU extension for oc_grad and/or oc not installed',
+)
+def test_oc_loss_cpu():
+    # Run the manually calculated gradient
+    w_ext, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
+    L = torch_cmspepr.objectcondensation.oc_loss_cpu.apply(model_out, beta, q, y, batch)
+    L.backward()
+
+    # Run the autograd version
+    w_autograd, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
+    d = torch.sqrt(torch.sum((x[1] - x[4])**2))
+    L_att = torch_cmspepr.objectcondensation.huber(d, 4.0) * q[1] * q[4] / 5.    
+    L_srp = -beta[4] / (20.0 * d**2 + 1.0) / float(cond_point_count[4]) / 1.
+    L_rep = torch.tensor(0.0)
+    for i in [0, 2, 3]:
+        d_sq = torch.sum((x[i] - x[4])**2)
+        L_rep += torch.exp(-4.*d_sq) * q[i] * q[4] / 5.
+    L = L_att + L_srp + L_rep
+    L.backward()
+
+    print(f'{w_ext.grad=}')
+    print(f'{w_autograd.grad=}')
+    assert torch.allclose(w_ext.grad, w_autograd.grad, rtol=0.01)

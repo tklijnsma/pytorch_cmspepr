@@ -44,7 +44,8 @@ _loaded_ops = set()
 # Load the extensions as ops
 def load_ops(so_file):
     if not osp.isfile(so_file):
-        logger.error(f'Could not load op: No file {so_file}')
+        # logger.error(f'Could not load op: No file {so_file}')
+        pass
     else:
         torch.ops.load_library(so_file)
         _loaded_ops.add(osp.basename(so_file))
@@ -54,6 +55,7 @@ THISDIR = osp.dirname(osp.abspath(__file__))
 load_ops(osp.join(THISDIR, "../select_knn_cpu.so"))
 load_ops(osp.join(THISDIR, "../select_knn_cuda.so"))
 load_ops(osp.join(THISDIR, "../oc_cpu.so"))
+load_ops(osp.join(THISDIR, "../oc_grad_cpu.so"))
 load_ops(osp.join(THISDIR, "../oc_cuda.so"))
 
 from torch_cmspepr.select_knn import select_knn, knn_graph
