@@ -106,14 +106,16 @@ oc_grad_cpu(
         int left = row_splits[i_event].item<int>();
         int right = row_splits[i_event + 1].item<int>();;
         float n = right - left;
+        auto y_this_event = y.slice(0, left, right);
 
         // Number of condensation points in event (needed for L_srp)
-        float n_cond = static_cast<float>(y.slice(0, left, right).max().item().toFloat());
+        float n_cond = static_cast<float>(y_this_event.max().item().toFloat());
 
         // Calculate the indices of the condensation points in this event.
         // cond_point_count is only non-zero for condensation points, use that fact 
         auto cond_point_indices = (cond_point_count.slice(0, left, right) > 0).nonzero().squeeze(1);
         cond_point_indices += left; // Previous line has indices w.r.t. 0; add left to get indices w.r.t. left
+        auto n_noise = (y_this_event == 0).sum().item().toFloat();
 
         for (int i = left; i < right; i++) {
             int j = which_cond_point[i].item<int>();
@@ -158,7 +160,31 @@ oc_grad_cpu(
                 grad_input[i].slice(/*dim=*/0, /*start=*/1) += torch::exp(-4. * d_sq) * -8. * (x[i] - x[k]) * q[i] * q[k] / n;
                 grad_input[k].slice(/*dim=*/0, /*start=*/1) += torch::exp(-4. * d_sq) * -8. * (x[k] - x[i]) * q[i] * q[k] / n;
             }
+
+            // Beta noise loss
+            if (y[i].item<int>() == 0){
+                grad_input[i][0] += d_sigmoid(model_output[i][0]) / n_noise;
+            }
         }
+
+        // Beta condensation point loss
+        for (int k_idx = 0; k_idx < cond_point_indices.numel(); k_idx++){
+            int k = cond_point_indices[k_idx].item<int>();
+            std::cout
+                << "k_idx=" << k_idx << " k=" << k << " n_cond=" << n_cond
+                << " grad[k,0]=" << (
+                    -.2 / n_cond
+                    * 1./(beta[k] + 1e-9)
+                    * d_sigmoid(model_output[k][0])
+                    )
+                << std::endl;
+            grad_input[k][0] += 
+                -.2 / n_cond
+                * 1./(beta[k] + 1e-9)
+                * d_sigmoid(model_output[k][0])
+                ;
+        }
+
     }
     return grad_input;
 }

@@ -431,7 +431,9 @@ def test_oc_grad_ext():
     for i in [0, 2, 3]:
         d_sq = torch.sum((x[i] - x[4])**2)
         L_rep += torch.exp(-4.*d_sq) * q[i] * q[4] / 5.
-    L = L_att + L_srp + L_rep
+    L_beta_noise = beta[[0,2,3]].mean()
+    L_beta_cond = -0.2 * torch.log(beta[4]+1e-9)
+    L = L_att + L_srp + L_rep + L_beta_noise + L_beta_cond
     L.backward()
 
     print(f'{w_ext.grad=}')
@@ -461,7 +463,9 @@ def test_oc_loss_cpu():
     for i in [0, 2, 3]:
         d_sq = torch.sum((x[i] - x[4])**2)
         L_rep += torch.exp(-4.*d_sq) * q[i] * q[4] / 5.
-    L = L_att + L_srp + L_rep
+    L_beta_noise = beta[[0,2,3]].mean()
+    L_beta_cond = -0.2 * torch.log(beta[4]+1e-9)
+    L = L_att + L_srp + L_rep + L_beta_noise + L_beta_cond
     L.backward()
 
     print(f'{w_ext.grad=}')
