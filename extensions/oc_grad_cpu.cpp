@@ -170,14 +170,6 @@ oc_grad_cpu(
         // Beta condensation point loss
         for (int k_idx = 0; k_idx < cond_point_indices.numel(); k_idx++){
             int k = cond_point_indices[k_idx].item<int>();
-            std::cout
-                << "k_idx=" << k_idx << " k=" << k << " n_cond=" << n_cond
-                << " grad[k,0]=" << (
-                    -.2 / n_cond
-                    * 1./(beta[k] + 1e-9)
-                    * d_sigmoid(model_output[k][0])
-                    )
-                << std::endl;
             grad_input[k][0] += 
                 -.2 / n_cond
                 * 1./(beta[k] + 1e-9)
