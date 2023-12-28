@@ -178,6 +178,9 @@ if torch.cuda.is_available():
         which_cond_point = double.which_cond_point.to(gpu)
 
 
+# _______________________________________________________________
+# Tests of the no-extension version of OC
+
 def test_oc_noext_single():
     print(f'{single.beta=}')
     print(f'{single.q=}')
@@ -217,8 +220,27 @@ def test_oc_noext_jit_double():
     assert torch.allclose(losses, losses_man, rtol=0.001, atol=0.001)
 
 
+# _______________________________________________________________
+# Tests of the extensions
+
+def test_analyze_cond_points():
+    from torch_cmspepr.objectcondensation import analyze_cond_points
+
+    cond_indices, cond_counts, cond_row_splits, which_cond_point = analyze_cond_points(
+        double.q, double.y.type(torch.int), double.row_splits
+    )
+    print(f'{cond_indices=}')
+    print(f'{cond_counts=}')
+    print(f'{cond_row_splits=}')
+    print(f'{which_cond_point=}')
+    assert torch.allclose(cond_indices, double.cond_indices)
+    assert torch.allclose(cond_counts, double.cond_counts)
+    assert torch.allclose(cond_row_splits, double.cond_row_splits)
+    assert torch.allclose(which_cond_point, double.which_cond_point)
+
+
 @pytest.mark.skipif(
-    not CPU_INSTALLED,
+    'oc_cpu.so' not in torch_cmspepr.LOADED_OPS,
     reason='CPU extension for oc not installed',
 )
 def test_oc_cpu_single():
@@ -248,24 +270,8 @@ def test_oc_interface_single():
     assert torch.allclose(losses, losses_man, rtol=0.001, atol=0.001)
 
 
-def test_analyze_cond_points():
-    from torch_cmspepr.objectcondensation import analyze_cond_points
-
-    cond_indices, cond_counts, cond_row_splits, which_cond_point = analyze_cond_points(
-        double.q, double.y.type(torch.int), double.row_splits
-    )
-    print(f'{cond_indices=}')
-    print(f'{cond_counts=}')
-    print(f'{cond_row_splits=}')
-    print(f'{which_cond_point=}')
-    assert torch.allclose(cond_indices, double.cond_indices)
-    assert torch.allclose(cond_counts, double.cond_counts)
-    assert torch.allclose(cond_row_splits, double.cond_row_splits)
-    assert torch.allclose(which_cond_point, double.which_cond_point)
-
-
 @pytest.mark.skipif(
-    not CPU_INSTALLED,
+    'oc_cpu.so' not in torch_cmspepr.LOADED_OPS,
     reason='CPU extension for oc not installed',
 )
 def test_oc_cpu_double():
@@ -286,7 +292,7 @@ def test_oc_cpu_double():
 
 
 @pytest.mark.skipif(
-    not CPU_INSTALLED,
+    'oc_cpu.so' not in torch_cmspepr.LOADED_OPS,
     reason='CPU extension for oc not installed',
 )
 def test_oc_python_batch():
@@ -307,7 +313,7 @@ def test_oc_python_batch():
 
 
 @pytest.mark.skipif(
-    not CUDA_INSTALLED,
+    'oc_cuda.so' not in torch_cmspepr.LOADED_OPS,
     reason='CUDA extension for oc not installed',
 )
 def test_oc_gpu_batch():
@@ -332,7 +338,7 @@ def test_oc_gpu_batch():
 
 
 @pytest.mark.skipif(
-    not CUDA_INSTALLED,
+    'oc_cuda.so' not in torch_cmspepr.LOADED_OPS,
     reason='CUDA extension for oc not installed',
 )
 def test_oc_interface_gpu_double():
@@ -352,13 +358,8 @@ def test_oc_interface_gpu_double():
     assert torch.allclose(losses_cuda, losses_man)
 
 
-
-
 # ____________________________________________________________
 # OC gradient calculations
-
-OC_GRAD_CPU_INSTALLED = osp.isfile(osp.join(SO_DIR, 'oc_grad_cpu.so'))
-
 
 # fmt: off
 # Generate some carefully crafted test data
@@ -401,9 +402,8 @@ def oc_grad_event():
     return w, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count
 
 
-
 @pytest.mark.skipif(
-    not OC_GRAD_CPU_INSTALLED,
+    'oc_grad_cpu.so' not in torch_cmspepr.LOADED_OPS,
     reason='CPU extension for oc_grad not installed',
 )
 def test_oc_grad_ext():
@@ -440,7 +440,10 @@ def test_oc_grad_ext():
 
 
 @pytest.mark.skipif(
-    not (OC_GRAD_CPU_INSTALLED and CPU_INSTALLED),
+    not(
+        'oc_grad_cpu.so' in torch_cmspepr.LOADED_OPS
+        and 'oc_cpu.so' in torch_cmspepr.LOADED_OPS
+        ),
     reason='CPU extension for oc_grad and/or oc not installed',
 )
 def test_oc_loss_cpu():

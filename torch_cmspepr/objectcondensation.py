@@ -1,9 +1,8 @@
 from typing import Tuple
 import torch
 
-from torch_cmspepr import _loaded_ops
+from . import extensions as ext
 from .utils import batch_to_row_splits
-
 
 def calc_q_betaclip(beta, qmin=1.0):
     """
@@ -135,64 +134,6 @@ def cond_point_indices_and_counts(
     return cond_point_index, cond_point_count
 
 
-# JIT compile the interface to the extensions.
-# Do not try to compile torch.ops.oc_* if those ops aren't actually loaded!
-if 'oc_cuda.so' in _loaded_ops:
-
-    @torch.jit.script
-    def oc_cuda(
-        beta,
-        q,
-        x,
-        y,
-        which_cond_point,
-        row_splits,
-        cond_row_splits,
-        cond_indices,
-        cond_counts,
-    ) -> torch.Tensor:
-        return torch.ops.oc_cuda.oc_cuda(
-            beta,
-            q,
-            x,
-            y,
-            which_cond_point,
-            row_splits,
-            cond_row_splits,
-            cond_indices,
-            cond_counts,
-        )
-
-else:
-
-    @torch.jit.script
-    def oc_cuda(
-        beta,
-        q,
-        x,
-        y,
-        which_cond_point,
-        row_splits,
-        cond_row_splits,
-        cond_indices,
-        cond_counts,
-    ) -> torch.Tensor:
-        raise Exception('CUDA extension for oc not installed')
-
-
-if 'oc_cpu.so' in _loaded_ops:
-
-    @torch.jit.script
-    def oc_cpu(beta, q, x, y, row_splits) -> torch.Tensor:
-        return torch.ops.oc_cpu.oc_cpu(beta, q, x, y, row_splits)
-
-else:
-
-    @torch.jit.script
-    def oc_cpu(beta, q, x, y, row_splits) -> torch.Tensor:
-        raise Exception('CPU extension for oc not installed')
-
-
 @torch.jit.script
 def oc(
     beta: torch.FloatTensor,
@@ -203,7 +144,7 @@ def oc(
     sB: float = 1.0,
 ):
     """
-    Calculate the object condensation loss function.
+    Calculate the object condensation loss function using the C++ extensions.
 
     Args:
         beta (torch.FloatTensor): Beta as described in https://arxiv.org/abs/2002.03605;
@@ -233,7 +174,7 @@ def oc(
     row_splits = batch_to_row_splits(batch).type(torch.int)
 
     if device == torch.device('cpu'):
-        return oc_cpu(beta, q, x, y.type(torch.int), row_splits)
+        return ext.oc_cpu(beta, q, x, y.type(torch.int), row_splits)
     else:
         # GPU needs more prep work in python
         # Determine condensation point indices, counts, and event boundaries
@@ -244,7 +185,7 @@ def oc(
             cond_row_splits,
             which_cond_point,
         ) = analyze_cond_points(q, y, row_splits)
-        losses = oc_cuda(
+        losses = ext.oc_cuda(
             beta,
             q,
             x,
@@ -401,55 +342,17 @@ def oc_noext_jit(
 # _______________________________________________________________________
 # Gradient calculation
 
-
-if 'oc_grad_cpu.so' in _loaded_ops:
-
-    @torch.jit.script
-    def oc_grad_cpu(
-        model_output,
-        beta,
-        q,
-        y,
-        which_cond_point,
-        cond_point_count,
-        row_splits,
-        ) -> torch.Tensor:
-        return torch.ops.oc_grad_cpu.oc_grad_cpu(
-            model_output,
-            beta,
-            q,
-            y,
-            which_cond_point,
-            cond_point_count,
-            row_splits,
-            )
-
-else:
-
-    @torch.jit.script
-    def oc_grad_cpu(
-        model_output,
-        beta,
-        q,
-        y,
-        which_cond_point,
-        cond_point_count,
-        row_splits,
-        ) -> torch.Tensor:
-        raise Exception('CPU extension for oc_grad not installed')
-
-
 class oc_loss_cpu(torch.autograd.Function):
     def forward(ctx, model_output, beta, q, y, batch):
         row_splits = batch_to_row_splits(batch).int()
         which_cond_point, cond_point_count = cond_point_indices_and_counts(q, y.int(), row_splits)
         ctx.save_for_backward(model_output, beta, q, y, which_cond_point, cond_point_count, row_splits)
-        return oc_cpu(beta, q, model_output, y.int(), row_splits).sum()
+        return ext.oc_cpu(beta, q, model_output, y.int(), row_splits).sum()
 
     @staticmethod
     def backward(ctx, grad_output):
         model_output, beta, q, y, which_cond_point, cond_point_count, row_splits = ctx.saved_tensors
-        grad_input = oc_grad_cpu(
+        grad_input = ext.oc_grad_cpu(
             model_output,
             beta,
             q,

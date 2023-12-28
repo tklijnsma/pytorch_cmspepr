@@ -59,13 +59,15 @@ expected_edge_index_loop = torch.LongTensor(
     ]
 )
 
+import torch_cmspepr
+
 SO_DIR = osp.dirname(osp.dirname(osp.abspath(__file__)))
 CPU_INSTALLED = osp.isfile(osp.join(SO_DIR, 'select_knn_cpu.so'))
 CUDA_INSTALLED = osp.isfile(osp.join(SO_DIR, 'select_knn_cuda.so'))
 
 
 @pytest.mark.skipif(
-    not CPU_INSTALLED,
+    'select_knn_cpu.so' not in torch_cmspepr.LOADED_OPS,
     reason='CPU extension for select_knn not installed',
 )
 def test_knn_graph_cpu():
@@ -98,7 +100,7 @@ def test_knn_graph_cpu():
 
 
 @pytest.mark.skipif(
-    not CPU_INSTALLED,
+    'select_knn_cpu.so' not in torch_cmspepr.LOADED_OPS,
     reason='CPU extension for select_knn not installed',
 )
 def test_knn_graph_cpu_1dim():
@@ -120,7 +122,7 @@ def test_knn_graph_cpu_1dim():
 
 
 @pytest.mark.skipif(
-    not CUDA_INSTALLED,
+    'select_knn_cuda.so' not in torch_cmspepr.LOADED_OPS,
     reason='CUDA extension for select_knn not installed',
 )
 def test_knn_graph_cuda():
@@ -145,7 +147,7 @@ def test_knn_graph_cuda():
 
 
 @pytest.mark.skipif(
-    not CPU_INSTALLED,
+    'select_knn_cpu.so' not in torch_cmspepr.LOADED_OPS,
     reason='CPU extension for select_knn not installed',
 )
 def test_select_knn_cpu():
@@ -165,7 +167,7 @@ def test_select_knn_cpu():
 
 
 @pytest.mark.skipif(
-    not CUDA_INSTALLED,
+    'select_knn_cuda.so' not in torch_cmspepr.LOADED_OPS,
     reason='CUDA extension for select_knn not installed',
 )
 def test_select_knn_cuda():
