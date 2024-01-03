@@ -436,9 +436,15 @@ def test_oc_grad_ext():
     L = L_att + L_srp + L_rep + L_beta_noise + L_beta_cond
     L.backward()
 
+    w_noext, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
+    L = torch_cmspepr.objectcondensation.oc_noext(beta, q, x, y, batch)
+    L.sum().backward()
+
     print(f'{w_ext.grad=}')
     print(f'{w_autograd.grad=}')
+    print(f'{w_noext.grad=}')
     assert torch.allclose(w_ext.grad, w_autograd.grad, rtol=0.01)
+    assert torch.allclose(w_noext.grad, w_autograd.grad, rtol=0.01)
 
 
 @pytest.mark.skipif(
@@ -471,3 +477,85 @@ def test_oc_loss_cpu():
     print(f'{w_ext.grad=}')
     print(f'{w_autograd.grad=}')
     assert torch.allclose(w_ext.grad, w_autograd.grad, rtol=0.01)
+
+
+@pytest.mark.skipif(
+    not('oc_grad_cpu.so' in torch_cmspepr.LOADED_OPS),
+    reason='CPU extension for oc_grad and/or oc not installed',
+)
+def test_oc_grad_ext_batch():
+    """Compares the gradient from the non-extension version of OC to the
+    manually computed gradient for a larger batch of events.
+    """
+    from torch_scatter import scatter_add
+    torch.manual_seed(1003)
+
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.nn = torch.nn.Linear(3, 3)
+
+        def forward(self, x, batch):
+            x = self.nn(x)
+            # hit_counts = scatter_add(torch.ones_like(batch, dtype=torch.long), batch.long()).float()
+            # x /= hit_counts[batch].unsqueeze(1)
+            return x
+
+    n_events = 5
+    n_hits_total = 1000
+    n_particles_per_event = 4
+    g_data = torch.rand(n_hits_total, 3)
+    g_batch = torch.sort(torch.randint(0, n_events, (n_hits_total,))).values
+
+    g_y = torch.zeros(n_hits_total, dtype=torch.long)
+    for i_event in range(n_events):
+        sel = g_batch==i_event
+        g_y[sel] = torch.randint(0, n_particles_per_event, (sel.sum(),)) # 4 particles per event
+
+    print(f'{g_data=}')
+    print(f'{g_y=}')
+    print(f'{g_batch=}')
+
+    grads = [None, None]    
+    for i in range(2):
+        # Create test data
+        data = g_data.clone()
+        y = g_y.clone()
+        batch = g_batch.clone()
+
+        model = Model()
+        model.nn.weight.data.fill_(0.01)
+        model.nn.bias.data.fill_(0.01)
+        model.train()
+        model_out = model(data, batch)
+        beta = torch.sigmoid(model_out[:,0])
+        q = torch_cmspepr.calc_q_betaclip(beta)
+        x = model_out[:,1:]
+
+        print(f'{model_out=}')
+        print(f'{beta=}')
+        print(f'{q=}')
+        print(f'{x=}')
+
+        if i == 0:
+            loss = torch_cmspepr.oc_noext(beta, q, x, y, batch)
+            loss.sum().backward()
+        else:
+            row_splits = torch_cmspepr.utils.batch_to_row_splits(batch)
+            which_cond_point, cond_point_count = torch_cmspepr.objectcondensation.cond_point_indices_and_counts(q, y, row_splits)
+            grad_input = torch.ops.oc_grad_cpu.oc_grad_cpu(
+                model_out,
+                beta,
+                q,
+                y,
+                which_cond_point,
+                cond_point_count,
+                row_splits,
+                )
+            model_out.backward(grad_input)
+
+        grads[i] = model.nn.weight.grad.detach()
+
+    print(f'autograd: {grads[0]}')
+    print(f'manual: {grads[1]}')
+    assert torch.allclose(grads[0], grads[1], rtol=0.01)

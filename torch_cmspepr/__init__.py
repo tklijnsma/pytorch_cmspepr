@@ -40,11 +40,13 @@ logger = setup_logger()
 from . import extensions as ext
 LOADED_OPS = ext.LOADED_OPS
 
+from . import utils
 from torch_cmspepr.select_knn import select_knn, knn_graph
 import torch_cmspepr.objectcondensation as objectcondensation
 from torch_cmspepr.objectcondensation import oc, oc_noext, oc_noext_jit, calc_q_betaclip
 
 __all__ = [
+    'utils',
     'select_knn', 'knn_graph',
     'objectcondensation',
     'oc', 'oc_noext', 'oc_noext_jit', 'calc_q_betaclip',

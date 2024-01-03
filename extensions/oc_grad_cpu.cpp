@@ -99,6 +99,7 @@ oc_grad_cpu(
     const size_t n_nodes = q.size(0);
     const auto n_dim_cluster_space = x.size(1);
     const size_t n_events = row_splits.size(0) - 1;
+    float n_events_f = static_cast<float>(n_events);
 
     torch::Tensor grad_input = torch::zeros_like(model_output);
 
@@ -127,26 +128,29 @@ oc_grad_cpu(
                 auto H = huber(d + 0.00001, 4.0);
 
                 // Attraction loss
-                grad_input[i][0] += H * q[j] * d_q(beta[i]) * d_sigmoid(model_output[i][0]) / n;
-                grad_input[j][0] += H * q[i] * d_q(beta[j]) * d_sigmoid(model_output[j][0]) / n;
-                grad_input[i].slice(/*dim=*/0, /*start=*/1) += q[i] * q[j] * d_huber(d, 4.0) * (1.0 / (2.0 * d)) * 2.0 * (x[i] - x[j]) / n;
-                grad_input[j].slice(/*dim=*/0, /*start=*/1) += q[i] * q[j] * d_huber(d, 4.0) * (1.0 / (2.0 * d)) * 2.0 * (x[j] - x[i]) / n;
+                grad_input[i][0] += H * q[j] * d_q(beta[i]) * d_sigmoid(model_output[i][0]) / n / n_events_f;
+                grad_input[j][0] += H * q[i] * d_q(beta[j]) * d_sigmoid(model_output[j][0]) / n / n_events_f;
+                grad_input[i].slice(/*dim=*/0, /*start=*/1) += q[i] * q[j] * d_huber(d, 4.0) * (1.0 / (2.0 * d)) * 2.0 * (x[i] - x[j]) / n  / n_events_f;
+                grad_input[j].slice(/*dim=*/0, /*start=*/1) += q[i] * q[j] * d_huber(d, 4.0) * (1.0 / (2.0 * d)) * 2.0 * (x[j] - x[i]) / n  / n_events_f;
 
                 // Short-range potential attraction
                 grad_input[i].slice(/*dim=*/0, /*start=*/1) += (
                     -beta[j] / (n_cond * cond_point_count[j])
                     * -1./torch::pow(20.0 * d_sq + 1.0, 2)
                     * 40.*(x[i] - x[j])
+                    / n_events_f
                 );
                 grad_input[j].slice(/*dim=*/0, /*start=*/1) += (
                     -beta[j] / (n_cond * cond_point_count[j])
                     * -1./torch::pow(20.0 * d_sq + 1.0, 2)
                     * 40.*(x[j] - x[i])
+                    / n_events_f
                 );
                 grad_input[j][0] += (
                     -1./(20.0 * d_sq + 1.0)
                     / (n_cond * cond_point_count[j])
                     * d_sigmoid(model_output[j][0])
+                    / n_events_f
                 );
             }
 
@@ -155,15 +159,15 @@ oc_grad_cpu(
                 int k = cond_point_indices[k_idx].item<int>();
                 if (k==j) continue; // Don't repulse from own cond point
                 auto d_sq = torch::sum(torch::pow((x[i] - x[k]), 2));
-                grad_input[i][0] += torch::exp(-4. * d_sq) * q[k] * d_q(beta[i]) * d_sigmoid(model_output[i][0]) / n;
-                grad_input[k][0] += torch::exp(-4. * d_sq) * q[i] * d_q(beta[k]) * d_sigmoid(model_output[k][0]) / n;
-                grad_input[i].slice(/*dim=*/0, /*start=*/1) += torch::exp(-4. * d_sq) * -8. * (x[i] - x[k]) * q[i] * q[k] / n;
-                grad_input[k].slice(/*dim=*/0, /*start=*/1) += torch::exp(-4. * d_sq) * -8. * (x[k] - x[i]) * q[i] * q[k] / n;
+                grad_input[i][0] += torch::exp(-4. * d_sq) * q[k] * d_q(beta[i]) * d_sigmoid(model_output[i][0]) / n / n_events_f;
+                grad_input[k][0] += torch::exp(-4. * d_sq) * q[i] * d_q(beta[k]) * d_sigmoid(model_output[k][0]) / n / n_events_f;
+                grad_input[i].slice(/*dim=*/0, /*start=*/1) += torch::exp(-4. * d_sq) * -8. * (x[i] - x[k]) * q[i] * q[k] / n / n_events_f;
+                grad_input[k].slice(/*dim=*/0, /*start=*/1) += torch::exp(-4. * d_sq) * -8. * (x[k] - x[i]) * q[i] * q[k] / n / n_events_f;
             }
 
             // Beta noise loss
             if (y[i].item<int>() == 0){
-                grad_input[i][0] += d_sigmoid(model_output[i][0]) / n_noise;
+                grad_input[i][0] += d_sigmoid(model_output[i][0]) / n_noise / n_events_f;
             }
         }
 
@@ -174,6 +178,7 @@ oc_grad_cpu(
                 -.2 / n_cond
                 * 1./(beta[k] + 1e-9)
                 * d_sigmoid(model_output[k][0])
+                / n_events_f
                 ;
         }
 
