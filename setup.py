@@ -39,6 +39,7 @@ extensions = [
     CppExtension('select_knn_cpu', ['extensions/select_knn_cpu.cpp'], **cpu_kwargs),
     CppExtension('oc_cpu', ['extensions/oc_cpu.cpp'], **cpu_kwargs),
     CppExtension('oc_grad_cpu', ['extensions/oc_grad_cpu.cpp'], **cpu_kwargs),
+    CppExtension('oc_grad_purecpp_cpu', ['extensions/oc_grad_purecpp_cpu.cpp'], **cpu_kwargs),
     ]
 if DO_CUDA:
     cuda_kwargs = dict(

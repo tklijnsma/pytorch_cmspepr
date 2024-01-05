@@ -25,6 +25,7 @@ load_ops("select_knn_cpu.so")
 load_ops("select_knn_cuda.so")
 load_ops("oc_cpu.so")
 load_ops("oc_grad_cpu.so")
+load_ops("oc_grad_purecpp_cpu.so")
 load_ops("oc_cuda.so")
 
 # ___________________________________________________________________
@@ -193,3 +194,40 @@ else:
         row_splits,
         ) -> torch.Tensor:
         raise Exception('CPU extension for oc_grad not installed')
+
+
+if 'oc_grad_purecpp_cpu.so' in LOADED_OPS:
+
+    @torch.jit.script
+    def oc_grad_purecpp_cpu(
+        model_output,
+        beta,
+        q,
+        y,
+        which_cond_point,
+        cond_point_count,
+        row_splits,
+        ) -> torch.Tensor:
+        return torch.ops.oc_grad_purecpp_cpu.oc_grad_purecpp_cpu(
+            model_output,
+            beta,
+            q,
+            y,
+            which_cond_point,
+            cond_point_count,
+            row_splits,
+            )
+
+else:
+
+    @torch.jit.script
+    def oc_grad_purecpp_cpu(
+        model_output,
+        beta,
+        q,
+        y,
+        which_cond_point,
+        cond_point_count,
+        row_splits,
+        ) -> torch.Tensor:
+        raise Exception('CPU extension for oc_grad_purecpp not installed')

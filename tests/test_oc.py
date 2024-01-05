@@ -388,7 +388,7 @@ def oc_grad_event():
     #     ], requires_grad=False)
     # assert torch.allclose(model_out, model_out_exp)
 
-    x = model_out[:,1:]
+    x = model_out[:,1:].contiguous()
     y = torch.LongTensor([0, 1, 0, 0, 1])
     batch = torch.LongTensor([0, 0, 0, 0, 0])
     row_splits = torch.LongTensor([0, 5])
@@ -559,3 +559,87 @@ def test_oc_grad_ext_batch():
     print(f'autograd: {grads[0]}')
     print(f'manual: {grads[1]}')
     assert torch.allclose(grads[0], grads[1], rtol=0.01)
+
+
+
+@pytest.mark.skipif(
+    'oc_grad_purecpp_cpu.so' not in torch_cmspepr.LOADED_OPS,
+    reason='CPU extension for oc_grad not installed',
+)
+def test_oc_grad_purecpp_ext():
+    torch.ops.load_library(osp.join(SO_DIR, 'oc_grad_purecpp_cpu.so'))
+
+    # Run the manually calculated gradient
+    w_ext, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
+    grad_input = torch.ops.oc_grad_purecpp_cpu.oc_grad_purecpp_cpu(
+        model_out,
+        beta,
+        q,
+        y.int(),
+        which_cond_point.int(),
+        cond_point_count.int(),
+        row_splits.int(),
+        )
+    model_out.backward(grad_input)
+
+    # Run the autograd version
+    w_autograd, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
+    d = torch.sqrt(torch.sum((x[1] - x[4])**2))
+    L_att = torch_cmspepr.objectcondensation.huber(d, 4.0) * q[1] * q[4] / 5.    
+    L_srp = -beta[4] / (20.0 * d**2 + 1.0) / float(cond_point_count[4]) / 1.
+    L_rep = torch.tensor(0.0)
+    for i in [0, 2, 3]:
+        d_sq = torch.sum((x[i] - x[4])**2)
+        L_rep += torch.exp(-4.*d_sq) * q[i] * q[4] / 5.
+    L_beta_noise = beta[[0,2,3]].mean()
+    L_beta_cond = -0.2 * torch.log(beta[4]+1e-9)
+    L = L_att + L_srp # + L_rep + L_beta_noise + L_beta_cond
+    L.backward()
+
+    w_noext, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
+    L = torch_cmspepr.objectcondensation.oc_noext(beta, q, x, y, batch)
+    (L[0]+L[2]).backward()
+
+    print(f'{w_ext.grad=}')
+    print(f'{w_autograd.grad=}')
+    print(f'{w_noext.grad=}')
+
+    # d = torch.sqrt(torch.sum((x[1] - x[4])**2))
+    # d_sq = torch.sum((x[1] - x[4])**2)
+    # H = torch_cmspepr.objectcondensation.huber(d, 4.0)
+    # print(f'{x[1]} {x[4]} {d=} {d_sq=} {H=}')
+
+    assert torch.allclose(w_ext.grad, w_autograd.grad, rtol=0.01)
+    assert torch.allclose(w_noext.grad, w_autograd.grad, rtol=0.01)
+
+
+@pytest.mark.skipif(
+    not(
+        'oc_grad_purecpp_cpu.so' in torch_cmspepr.LOADED_OPS
+        and 'oc_grad_cpu.so' in torch_cmspepr.LOADED_OPS
+        ),
+    reason='CPU extension for oc_grad not installed',
+)
+def test_oc_grad_purecpp_ext_vs_nopure():
+    w, model_out, beta, q, x, y, batch, row_splits, which_cond_point, cond_point_count = oc_grad_event()
+    grad_pure = torch.ops.oc_grad_purecpp_cpu.oc_grad_purecpp_cpu(
+        model_out,
+        beta,
+        q,
+        y.int(),
+        which_cond_point.int(),
+        cond_point_count.int(),
+        row_splits.int(),
+        )
+    grad_nopure = torch.ops.oc_grad_cpu.oc_grad_cpu(
+        model_out,
+        beta,
+        q,
+        y.int(),
+        which_cond_point.int(),
+        cond_point_count.int(),
+        row_splits.int(),
+        )
+    print(f'{grad_pure=}')
+    print(f'{grad_nopure=}')
+    assert torch.allclose(grad_pure, grad_nopure, rtol=0.01)
